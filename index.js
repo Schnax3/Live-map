@@ -248,6 +248,7 @@ function hideLoading() {
     console.error("[Firebase] watchAllUsers Fehler", err);
     showLoadingError("Firebase-Daten konnten nicht geladen werden: " + (err.message || err));
   });
+}
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       // ─── Geolocation ──────────────────────────────────────────────────────────────
 
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       function startGeolocation() {
