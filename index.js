@@ -104,7 +104,8 @@ const FIREBASE_CONFIG = {
                                                                                                                   statStreak: document.getElementById("stat-streak"),
                                                                                                                     historyList: document.getElementById("history-list"),
                                                                                                                       sidebar: document.getElementById("sidebar"),
-                                                                                                                        sheetHandle: document.getElementById("sheet-handle")
+                                                                                                                        sheetHandle: document.getElementById("sheet-handle"),
+                                                                                                                          sidebarScroll: document.getElementById("sidebar-scroll")
                                                                                             };
 
 // Hilfsfunktionen
@@ -339,11 +340,12 @@ function updateHistoryUI() {
   }
 
 function setupMobileSheet() {
-  if (!DOM.sidebar || !DOM.sheetHandle) return;
+  if (!DOM.sidebar || !DOM.sheetHandle || !DOM.sidebarScroll) return;
   const mql = window.matchMedia("(max-width: 640px)");
   let startY = 0;
   let currentY = 0;
   let dragging = false;
+  let dragSource = "handle";
   let state = "mid";
 
   const setState = (next) => {
@@ -358,8 +360,19 @@ function setupMobileSheet() {
   const onTouchStart = (e) => {
     if (!mql.matches) return;
     const target = e.target;
-    if (target.closest("#user-list-container")) return;
+    const fromHandle = !!target.closest("#sheet-handle");
+    const atTop = DOM.sidebarScroll.scrollTop <= 2;
+    const scrollableBlocked = !!target.closest("#user-list-container");
+    if (scrollableBlocked) {
+      dragging = false;
+      return;
+    }
+    if (!fromHandle && !atTop) {
+      dragging = false;
+      return;
+    }
     dragging = true;
+    dragSource = fromHandle ? "handle" : "content";
     startY = e.touches[0].clientY;
     currentY = 0;
   };
@@ -368,7 +381,9 @@ function setupMobileSheet() {
     if (!dragging || !mql.matches) return;
     const dy = e.touches[0].clientY - startY;
     currentY = dy;
-    if (Math.abs(dy) > 6) e.preventDefault();
+    const draggingDownFromTop = dragSource === "content" && dy > 6;
+    const draggingHandle = dragSource === "handle" && Math.abs(dy) > 6;
+    if (draggingDownFromTop || draggingHandle) e.preventDefault();
   };
 
   const onTouchEnd = () => {
@@ -379,12 +394,6 @@ function setupMobileSheet() {
     else setState("mid");
   };
 
-  DOM.sidebar.addEventListener("click", (e) => {
-    if (!mql.matches) return;
-    if (e.target.closest("#user-list-container")) return;
-    if (e.target.closest("button")) return;
-    setState(state === "open" ? "mid" : "open");
-  });
   DOM.sheetHandle.addEventListener("click", (e) => {
     e.stopPropagation();
     if (!mql.matches) return;
