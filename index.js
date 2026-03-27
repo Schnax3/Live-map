@@ -1,5 +1,5 @@
 ﻿import { initializeApp }                        from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
-import { getDatabase, ref, set, onValue, remove } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-database.js";
+import { getDatabase, ref, set, onValue, remove, onDisconnect } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-database.js";
 
 // Firebase Config
 const FIREBASE_CONFIG = {
@@ -243,12 +243,19 @@ function formatCountdown(ts) {
             }
 
 function computeTargetId() {
-  const others = Object.keys(state.users).filter(uid => uid !== state.userId);
-    if (others.length === 0) return null;
-      others.sort();
-        const seed = hashSeed(state.dayKey);
-          return others[seed % others.length];
-          }
+  const now = Date.now();
+    const others = Object.entries(state.users)
+      .filter(([uid, entry]) => uid !== state.userId && isActiveUser(entry, now))
+      .map(([uid]) => uid);
+  if (others.length === 0) return null;
+  others.sort();
+  const seed = hashSeed(state.dayKey);
+  return others[seed % others.length];
+}
+
+function isActiveUser(entry, now) {
+  return entry && (now - entry.timestamp) <= CONFIG.inactiveAfterMs;
+}
 
 function updateTargetPanel() {
   const now = Date.now();
@@ -594,7 +601,7 @@ function renderUserList() {
 
   let activeCount = 0;
   for (const [uid, data] of sorted) {
-    if (now - data.timestamp > CONFIG.inactiveAfterMs) continue;
+    if (!isActiveUser(data, now)) continue;
     const isMe = uid === state.userId;
     const hidden = data.hiddenUntil && data.hiddenUntil > now;
     if (hidden && !isMe) continue;
@@ -674,7 +681,7 @@ function watchAllUsers() {
 
     const nextUsers = {};
     for (const [uid, entry] of Object.entries(data)) {
-      nextUsers[uid] = {
+      const normalized = {
         lat: entry.latitude,
         lng: entry.longitude,
         color: entry.color || "#4d8eff",
@@ -682,6 +689,8 @@ function watchAllUsers() {
         hiddenUntil: entry.hiddenUntil || 0,
         shieldUntil: entry.shieldUntil || 0
       };
+      if (!isActiveUser(normalized, now)) continue;
+      nextUsers[uid] = normalized;
     }
     state.users = nextUsers;
 
@@ -692,7 +701,7 @@ function watchAllUsers() {
       state.targetNextUpdateAt = 0;
     }
 
-    // Entfernte Nutzer löschen oder versteckte Marker entfernen
+    // Entfernte/inaktive Nutzer löschen oder versteckte Marker entfernen
     for (const uid of Object.keys(state.markers)) {
       const u = state.users[uid];
       const hidden = u && u.hiddenUntil && u.hiddenUntil > now;
@@ -843,9 +852,10 @@ window.addEventListener("unhandledrejection", event => {
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               DOM.loadingMsg.textContent = "Verbinde mit Firebase…";
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 try {
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     const app    = initializeApp(FIREBASE_CONFIG);
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        state.db       = getDatabase(app);
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            state.usersRef = ref(state.db, "users");
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                state.myRef    = ref(state.db, `users/${state.userId}`);
+                                                                                                        state.db       = getDatabase(app);
+                                                                                                            state.usersRef = ref(state.db, "users");
+                                                                                                                state.myRef    = ref(state.db, `users/${state.userId}`);
+                                                                                                                onDisconnect(state.myRef).remove();
 
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     // Verbindungsstatus beobachten
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         const connRef = ref(state.db, ".info/connected");
