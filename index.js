@@ -12,6 +12,8 @@ const FIREBASE_CONFIG = {
               appId:             "1:81955613486:web:3a7fe4c013c12ac0d6a8bf"
               };
 
+const ADMIN_PASSWORD = "livetrack-2026";
+
 // Konfiguration
               const CONFIG = {
                 updateIntervalMs: 5000,       // Firebase-Update max. alle 5 Sekunden
@@ -51,6 +53,7 @@ const FIREBASE_CONFIG = {
                                                         watchId:    null,
                                                           markers:    {},   // { userId: L.Marker }
                                                             users:      {},   // { userId: { lat, lng, color, timestamp } }
+                                                              rawUsers:   {},
                                                               map:        null,
                                                                 db:         null,
                                                                   myRef:      null,
@@ -103,9 +106,20 @@ const FIREBASE_CONFIG = {
                                                                                                                 statToday: document.getElementById("stat-today"),
                                                                                                                   statStreak: document.getElementById("stat-streak"),
                                                                                                                     historyList: document.getElementById("history-list"),
-                                                                                                                      sidebar: document.getElementById("sidebar"),
+                                                                                                                          sidebar: document.getElementById("sidebar"),
                                                                                                                         sheetHandle: document.getElementById("sheet-handle"),
-                                                                                                                          sidebarScroll: document.getElementById("sidebar-scroll")
+                                                                                                                          sidebarScroll: document.getElementById("sidebar-scroll"),
+                                                                                                                            adminTrigger: document.getElementById("admin-trigger"),
+                                                                                                                              adminOverlay: document.getElementById("admin-overlay"),
+                                                                                                                                adminPassword: document.getElementById("admin-password"),
+                                                                                                                                  adminLogin: document.getElementById("admin-login"),
+                                                                                                                                    adminClose: document.getElementById("admin-close"),
+                                                                                                                                      adminTools: document.getElementById("admin-tools"),
+                                                                                                                                        adminNote: document.getElementById("admin-note"),
+                                                                                                                                          adminResetDay: document.getElementById("admin-reset-day"),
+                                                                                                                                            adminRerollPowerup: document.getElementById("admin-reroll-powerup"),
+                                                                                                                                              adminClearHistory: document.getElementById("admin-clear-history"),
+                                                                                                                                                adminRemoveStale: document.getElementById("admin-remove-stale")
                                                                                             };
 
 // Hilfsfunktionen
@@ -338,6 +352,115 @@ function updateHistoryUI() {
         DOM.historyList.appendChild(row);
   }
   }
+
+function setAdminNote(text) {
+  if (DOM.adminNote) DOM.adminNote.textContent = text;
+}
+
+function openAdminMenu() {
+  if (!DOM.adminOverlay) return;
+  DOM.adminOverlay.classList.add("open");
+  DOM.adminTools.classList.remove("open");
+  DOM.adminPassword.value = "";
+  setAdminNote("Passwort eingeben.");
+  setTimeout(() => DOM.adminPassword?.focus(), 30);
+}
+
+function closeAdminMenu() {
+  if (!DOM.adminOverlay) return;
+  DOM.adminOverlay.classList.remove("open");
+  DOM.adminPassword.value = "";
+}
+
+function unlockAdminMenu() {
+  if (!DOM.adminPassword) return;
+  if (DOM.adminPassword.value !== ADMIN_PASSWORD) {
+    setAdminNote("Falsches Passwort.");
+    DOM.adminPassword.select();
+    return;
+  }
+  DOM.adminTools.classList.add("open");
+  setAdminNote("Admin-Menue freigeschaltet.");
+}
+
+function adminResetDay() {
+  state.caughtToday = false;
+  state.skipsUsed = 0;
+  state.powerupActiveUntil = 0;
+  state.powerupCooldownUntil = 0;
+  state.targetSeen = null;
+  state.targetNextUpdateAt = 0;
+  state.targetRevealInterval = GAME.targetUpdateMs;
+  applyPowerupEffectEnd(getPowerupById(state.powerupId));
+  state.powerupId = pickPowerup(null).id;
+  saveDailyState();
+  updatePowerupUI();
+  updateTargetPanel();
+  updateHistoryUI();
+  syncMyState();
+  setAdminNote("Tagesstatus wurde zurueckgesetzt.");
+}
+
+function adminRerollPowerup() {
+  const current = state.powerupId;
+  state.powerupActiveUntil = 0;
+  state.powerupCooldownUntil = 0;
+  applyPowerupEffectEnd(getPowerupById(current));
+  state.powerupId = pickPowerup(current).id;
+  saveDailyState();
+  updatePowerupUI();
+  syncMyState();
+  setAdminNote(`Neues Power-Up: ${getPowerupById(state.powerupId)?.name || "-"}.`);
+}
+
+function adminClearHistory() {
+  state.history = [];
+  localStorage.removeItem("lm_history");
+  if (state.db && state.userId) {
+    remove(ref(state.db, `history/${state.userId}`)).catch(() => {});
+  }
+  updateHistoryUI();
+  setAdminNote("History geloescht.");
+}
+
+function adminRemoveStaleUsers() {
+  if (!state.db) {
+    setAdminNote("Firebase nicht bereit.");
+    return;
+  }
+  const now = Date.now();
+  const staleUsers = Object.entries(state.rawUsers).filter(([uid, entry]) => {
+    if (uid === state.userId) return false;
+    const timestamp = entry?.timestamp || 0;
+    return (now - timestamp) > CONFIG.inactiveAfterMs;
+  });
+  if (!staleUsers.length) {
+    setAdminNote("Keine stale Nutzer gefunden.");
+    return;
+  }
+  for (const [uid] of staleUsers) {
+    remove(ref(state.db, `users/${uid}`)).catch(() => {});
+  }
+  setAdminNote(`${staleUsers.length} stale Nutzer entfernt.`);
+}
+
+function setupAdminMenu() {
+  if (!DOM.adminTrigger || !DOM.adminOverlay) return;
+  DOM.adminTrigger.addEventListener("click", openAdminMenu);
+  DOM.adminClose.addEventListener("click", closeAdminMenu);
+  DOM.adminLogin.addEventListener("click", unlockAdminMenu);
+  DOM.adminPassword.addEventListener("keydown", event => {
+    if (event.key === "Enter") unlockAdminMenu();
+    if (event.key === "Escape") closeAdminMenu();
+  });
+  DOM.adminOverlay.addEventListener("click", event => {
+    if (event.target === DOM.adminOverlay) closeAdminMenu();
+  });
+  DOM.adminResetDay.addEventListener("click", adminResetDay);
+  DOM.adminRerollPowerup.addEventListener("click", adminRerollPowerup);
+  DOM.adminClearHistory.addEventListener("click", adminClearHistory);
+  DOM.adminRemoveStale.addEventListener("click", adminRemoveStaleUsers);
+}
 
 function setupMobileSheet() {
   if (!DOM.sidebar || !DOM.sheetHandle || !DOM.sidebarScroll) return;
@@ -760,6 +883,7 @@ function watchAllUsers() {
   onValue(state.usersRef, snapshot => {
     const data = snapshot.val() || {};
     const now = Date.now();
+    state.rawUsers = data;
 
     const nextUsers = {};
     for (const [uid, entry] of Object.entries(data)) {
@@ -927,7 +1051,8 @@ window.addEventListener("unhandledrejection", event => {
                                                                                                                     DOM.powerupUse.addEventListener("click", activatePowerup);
                                                                                                                       DOM.powerupCancel.addEventListener("click", cancelPowerup);
                                                                                                                         setInterval(tick, 1000);
-                                                                                                                        setupMobileSheet();
+                                                                                                                       setupMobileSheet();
+                                                                                                                       setupAdminMenu();
 
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           DOM.loadingMsg.textContent = "Initialisiere Karte…";
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             initMap();
