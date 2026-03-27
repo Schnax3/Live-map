@@ -81,19 +81,25 @@ const FIREBASE_CONFIG = {
 
                                                                                                             function showError(msg) {
                                                                                                               DOM.errorPanel.style.display = "block";
-                                                                                                                DOM.errorPanel.innerHTML = `⚠ ${msg}`;
-                                                                                                                }
+  DOM.errorPanel.innerHTML = `⚠ ${msg}`;
+}
 
-                                                                                                                function hideError() {
-                                                                                                                  DOM.errorPanel.style.display = "none";
-                                                                                                                  }
+function showLoadingError(msg) {
+  DOM.loading.style.display = "flex";
+  DOM.loading.classList.remove("hidden");
+  DOM.loadingMsg.textContent = `Fehler beim Laden: ${msg}`;
+  setStatus("error", "Fehler beim Laden");
+  showError(msg);
+}
 
-                                                                                                                  function hideLoading() {
-                                                                                                                    DOM.loading.classList.add("hidden");
-                                                                                                                      setTimeout(() => DOM.loading.style.display = "none", 600);
-                                                                                                                      }
+function hideError() {
+  DOM.errorPanel.style.display = "none";
+}
 
-                                                                                                                      // ─── Leaflet Icons ────────────────────────────────────────────────────────────
+function hideLoading() {
+  DOM.loading.classList.add("hidden");
+  setTimeout(() => DOM.loading.style.display = "none", 600);
+}
 
                                                                                                                       function createMyIcon(color) {
                                                                                                                         return L.divIcon({
@@ -120,13 +126,18 @@ const FIREBASE_CONFIG = {
                                                                                                                                                                                           // ─── Karte ────────────────────────────────────────────────────────────────────
 
                                                                                                                                                                                           function initMap() {
-                                                                                                                                                                                            state.map = L.map("map", { center: [51.1657, 10.4515], zoom: 6 });
-                                                                                                                                                                                              L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-                                                                                                                                                                                                  attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-                                                                                                                                                                                                      maxZoom: 19
-                                                                                                                                                                                                        }).addTo(state.map);
-                                                                                                                                                                                                        }
-
+  try {
+    state.map = L.map("map", { center: [51.1657, 10.4515], zoom: 6 });
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      maxZoom: 19
+    }).addTo(state.map);
+  } catch (err) {
+    console.error("[Map] Init-Error", err);
+    showLoadingError("Karte konnte nicht initialisiert werden. Bitte Seite neu laden.");
+    throw err;
+  }
+}
                                                                                                                                                                                                         // ─── Marker-Verwaltung ────────────────────────────────────────────────────────
 
                                                                                                                                                                                                         function upsertMarker(userId, lat, lng, color, isMe) {
