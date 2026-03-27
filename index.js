@@ -304,6 +304,17 @@ function hideLoading() {
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   if (state.watchId !== null) navigator.geolocation.clearWatch(state.watchId);
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   }
 
+window.addEventListener("error", event => {
+  console.error("[Global] Fehler", event.error || event.message);
+  showLoadingError(event.message || "Unbekannter Fehler");
+});
+
+window.addEventListener("unhandledrejection", event => {
+  console.error("[Global] Unerwartete Promise-Rejection", event.reason);
+  const reason = event.reason?.message || String(event.reason);
+  showLoadingError("Unerwarteter Fehler: " + reason);
+});
+
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   // ─── Init ─────────────────────────────────────────────────────────────────────
 
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   async function init() {
