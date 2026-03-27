@@ -99,10 +99,12 @@ const FIREBASE_CONFIG = {
                                                                                                                 powerupCooldown: document.getElementById("powerup-cooldown"),
                                                                                                                   skipCount: document.getElementById("skip-count"),
                                                                                                                     powerupUse: document.getElementById("powerup-use"),
-                                                                                                                      powerupCancel: document.getElementById("powerup-cancel"),
-                                                                                                                        statToday: document.getElementById("stat-today"),
-                                                                                                                          statStreak: document.getElementById("stat-streak"),
-                                                                                                                            historyList: document.getElementById("history-list")
+                                                                                                            powerupCancel: document.getElementById("powerup-cancel"),
+                                                                                                                statToday: document.getElementById("stat-today"),
+                                                                                                                  statStreak: document.getElementById("stat-streak"),
+                                                                                                                    historyList: document.getElementById("history-list"),
+                                                                                                                      sidebar: document.getElementById("sidebar"),
+                                                                                                                        sheetHandle: document.getElementById("sheet-handle")
                                                                                             };
 
 // Hilfsfunktionen
@@ -333,8 +335,49 @@ function updateHistoryUI() {
       <span class="badge ${badge}">${badgeText}</span>
     `;
         DOM.historyList.appendChild(row);
-          }
-          }
+  }
+  }
+
+function setupMobileSheet() {
+  if (!DOM.sidebar || !DOM.sheetHandle) return;
+  const mql = window.matchMedia("(max-width: 640px)");
+  let startY = 0;
+  let currentY = 0;
+  let dragging = false;
+
+  const setCollapsed = (collapsed) => {
+    DOM.sidebar.classList.toggle("collapsed", collapsed);
+  };
+
+  const onTouchStart = (e) => {
+    if (!mql.matches) return;
+    dragging = true;
+    startY = e.touches[0].clientY;
+    currentY = 0;
+  };
+
+  const onTouchMove = (e) => {
+    if (!dragging || !mql.matches) return;
+    const dy = e.touches[0].clientY - startY;
+    currentY = dy;
+    if (Math.abs(dy) > 6) e.preventDefault();
+  };
+
+  const onTouchEnd = () => {
+    if (!dragging || !mql.matches) return;
+    dragging = false;
+    if (currentY > 40) setCollapsed(true);
+    if (currentY < -40) setCollapsed(false);
+  };
+
+  DOM.sheetHandle.addEventListener("click", () => {
+    if (!mql.matches) return;
+    setCollapsed(!DOM.sidebar.classList.contains("collapsed"));
+  });
+  DOM.sheetHandle.addEventListener("touchstart", onTouchStart, { passive: true });
+  DOM.sheetHandle.addEventListener("touchmove", onTouchMove, { passive: false });
+  DOM.sheetHandle.addEventListener("touchend", onTouchEnd);
+}
 
 function applyPowerupEffectStart(powerup) {
   if (!powerup) return;
@@ -836,15 +879,16 @@ window.addEventListener("unhandledrejection", event => {
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         }
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         }
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         ensurePowerup();
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          updatePowerupUI();
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            updateTargetPanel();
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              updateHistoryUI();
+                                                                                                          updatePowerupUI();
+                                                                                                            updateTargetPanel();
+                                                                                                              updateHistoryUI();
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                DOM.catchBtn.addEventListener("click", catchTarget);
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  DOM.skipBtn.addEventListener("click", skipPowerup);
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    DOM.powerupUse.addEventListener("click", activatePowerup);
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      DOM.powerupCancel.addEventListener("click", cancelPowerup);
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        setInterval(tick, 1000);
+                                                                                                                DOM.catchBtn.addEventListener("click", catchTarget);
+                                                                                                                  DOM.skipBtn.addEventListener("click", skipPowerup);
+                                                                                                                    DOM.powerupUse.addEventListener("click", activatePowerup);
+                                                                                                                      DOM.powerupCancel.addEventListener("click", cancelPowerup);
+                                                                                                                        setInterval(tick, 1000);
+                                                                                                                        setupMobileSheet();
 
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           DOM.loadingMsg.textContent = "Initialisiere Karte…";
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             initMap();
