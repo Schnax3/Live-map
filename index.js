@@ -1,7 +1,7 @@
-import { initializeApp }                        from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
+﻿import { initializeApp }                        from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
 import { getDatabase, ref, set, onValue, remove } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-database.js";
 
-// ─── Firebase Config ──────────────────────────────────────────────────────────
+// Firebase Config
 const FIREBASE_CONFIG = {
   apiKey:            "AIzaSyBjd4IyQkhKsgvXmlvJ5P8nn4SS8Et6MAw",
     authDomain:        "maptracker-96fdb.firebaseapp.com",
@@ -12,7 +12,7 @@ const FIREBASE_CONFIG = {
               appId:             "1:81955613486:web:3a7fe4c013c12ac0d6a8bf"
               };
 
-              // ─── Konfiguration ────────────────────────────────────────────────────────────
+// Konfiguration
               const CONFIG = {
                 updateIntervalMs: 5000,       // Firebase-Update max. alle 5 Sekunden
                   inactiveAfterMs:  30000,      // Nutzer nach 30s als inaktiv markieren
@@ -27,11 +27,26 @@ const FIREBASE_CONFIG = {
                                               ]
                                               };
 
-                                              // ─── State ────────────────────────────────────────────────────────────────────
+                                              const GAME = {
+                                                targetUpdateMs: 10 * 60 * 1000,
+                                                  targetFastMs:   30 * 1000,
+                                                    skipLimit:     3,
+                                                      powerups: [
+                                                          { id: "pulse",   name: "Pulse",  desc: "Ziel sofort + 2 Min lang alle 30s aktualisiert.", durationMs: 2 * 60 * 1000,  cooldownMs: 12 * 60 * 1000, effect: "reveal" },
+                                                              { id: "tracker", name: "Tracker Boost", desc: "5 Min lang Ziel alle 30s aktualisiert.",   durationMs: 5 * 60 * 1000,  cooldownMs: 25 * 60 * 1000, effect: "fast" },
+                                                                  { id: "overclock", name: "Overclock", desc: "90s lang Ziel alle 10s aktualisiert.",      durationMs: 90 * 1000,      cooldownMs: 20 * 60 * 1000, effect: "ultra" },
+                                                                      { id: "cloak",  name: "Cloak",  desc: "15 Min unsichtbar für andere Spieler.",       durationMs: 15 * 60 * 1000, cooldownMs: 35 * 60 * 1000, effect: "cloak" },
+                                                                          { id: "shield", name: "Shield", desc: "8 Min lang nicht fangbar.",                 durationMs: 8 * 60 * 1000,  cooldownMs: 25 * 60 * 1000, effect: "shield" },
+                                                                              { id: "jammer", name: "Jammer", desc: "6 Min lang nur eingefrorene Position.",   durationMs: 6 * 60 * 1000,  cooldownMs: 25 * 60 * 1000, effect: "jam" }
+                                                                                ]
+                                                                                };
+
+// State
                                               const state = {
                                                 userId:     null,
                                                   userColor:  null,
                                                     myPosition: null,
+                                                      lastAccuracy: null,
                                                       lastUpdate: 0,
                                                         watchId:    null,
                                                           markers:    {},   // { userId: L.Marker }
@@ -39,10 +54,26 @@ const FIREBASE_CONFIG = {
                                                               map:        null,
                                                                 db:         null,
                                                                   myRef:      null,
-                                                                    usersRef:   null
+                                                                    usersRef:   null,
+                                                                      dayKey:     null,
+                                                                        targetId:  null,
+                                                                          targetSeen: null,
+                                                                            targetNextUpdateAt: 0,
+                                                                              targetRevealInterval: GAME.targetUpdateMs,
+                                                                                caughtToday: false,
+                                                                                  skipsUsed: 0,
+                                                                                    powerupId: null,
+                                                                                      powerupActiveUntil: 0,
+                                                                                        powerupCooldownUntil: 0,
+                                                                                          hiddenUntil: 0,
+                                                                                            shieldUntil: 0,
+                                                                                              jamUntil: 0,
+                                                                                                jamLat: null,
+                                                                                                  jamLng: null,
+                                                                                                    history: []
                                                                     };
 
-                                                                    // ─── DOM ──────────────────────────────────────────────────────────────────────
+// DOM
                                                                     const DOM = {
                                                                       loading:     document.getElementById("loading"),
                                                                         loadingMsg:  document.getElementById("loading-msg"),
@@ -55,10 +86,26 @@ const FIREBASE_CONFIG = {
                                                                                       myAcc:       document.getElementById("my-acc"),
                                                                                         myTime:      document.getElementById("my-time"),
                                                                                           errorPanel:  document.getElementById("error-panel"),
-                                                                                            userList:    document.getElementById("user-list")
+                                                                                            userList:    document.getElementById("user-list"),
+                                                                                              targetId:   document.getElementById("target-id"),
+                                                                                                targetStatus: document.getElementById("target-status"),
+                                                                                                  targetLast: document.getElementById("target-last"),
+                                                                                                    targetNext: document.getElementById("target-next"),
+                                                                                                      catchBtn: document.getElementById("catch-btn"),
+                                                                                                        skipBtn: document.getElementById("skip-btn"),
+                                                                                                          powerupTitle: document.getElementById("powerup-title"),
+                                                                                                            powerupDesc: document.getElementById("powerup-desc"),
+                                                                                                              powerupState: document.getElementById("powerup-state"),
+                                                                                                                powerupCooldown: document.getElementById("powerup-cooldown"),
+                                                                                                                  skipCount: document.getElementById("skip-count"),
+                                                                                                                    powerupUse: document.getElementById("powerup-use"),
+                                                                                                                      powerupCancel: document.getElementById("powerup-cancel"),
+                                                                                                                        statToday: document.getElementById("stat-today"),
+                                                                                                                          statStreak: document.getElementById("stat-streak"),
+                                                                                                                            historyList: document.getElementById("history-list")
                                                                                             };
 
-                                                                                            // ─── Hilfsfunktionen ──────────────────────────────────────────────────────────
+// Hilfsfunktionen
 
                                                                                             function generateId() {
                                                                                               return Math.random().toString(36).substring(2, 9).toUpperCase();
@@ -68,11 +115,379 @@ const FIREBASE_CONFIG = {
                                                                                                 return CONFIG.colors[Math.floor(Math.random() * CONFIG.colors.length)];
                                                                                                 }
 
-                                                                                                function formatTime(ts) {
-                                                                                                  return new Date(ts).toLocaleTimeString("de-DE", {
-                                                                                                      hour: "2-digit", minute: "2-digit", second: "2-digit"
-                                                                                                        });
-                                                                                                        }
+function formatTime(ts) {
+  return new Date(ts).toLocaleTimeString("de-DE", {
+      hour: "2-digit", minute: "2-digit", second: "2-digit"
+        });
+        }
+
+function getDayKey() {
+  const d = new Date();
+    const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+          return `${y}-${m}-${day}`;
+          }
+
+function hashSeed(str) {
+  let h = 0;
+    for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
+      return h;
+      }
+
+function loadIdentity() {
+  const storedId = localStorage.getItem("lm_userId");
+    const storedColor = localStorage.getItem("lm_userColor");
+      if (storedId) state.userId = storedId;
+        else {
+            state.userId = generateId();
+                localStorage.setItem("lm_userId", state.userId);
+                  }
+                    if (storedColor) state.userColor = storedColor;
+                      else {
+                          state.userColor = randomColor();
+                              localStorage.setItem("lm_userColor", state.userColor);
+                                }
+                                }
+
+function loadDailyState() {
+  const key = localStorage.getItem("lm_dailyState");
+    if (!key) return;
+      try {
+          const data = JSON.parse(key);
+              if (data.dayKey !== state.dayKey) return;
+                  state.skipsUsed = data.skipsUsed || 0;
+                      state.caughtToday = !!data.caughtToday;
+                          state.powerupId = data.powerupId || null;
+                              state.powerupActiveUntil = data.powerupActiveUntil || 0;
+                                  state.powerupCooldownUntil = data.powerupCooldownUntil || 0;
+                                    } catch {}
+                                    }
+
+function saveDailyState() {
+  const data = {
+      dayKey: state.dayKey,
+          skipsUsed: state.skipsUsed,
+              caughtToday: state.caughtToday,
+                  powerupId: state.powerupId,
+                      powerupActiveUntil: state.powerupActiveUntil,
+                          powerupCooldownUntil: state.powerupCooldownUntil
+                            };
+                              localStorage.setItem("lm_dailyState", JSON.stringify(data));
+                              }
+
+function loadHistory() {
+  const raw = localStorage.getItem("lm_history");
+    if (!raw) return;
+      try {
+          const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed)) state.history = parsed;
+              } catch {}
+              }
+
+function saveHistory() {
+  localStorage.setItem("lm_history", JSON.stringify(state.history.slice(-14)));
+}
+
+function upsertHistory(dayKey, caught, targetId) {
+  const idx = state.history.findIndex(h => h.dayKey === dayKey);
+    const entry = { dayKey, caught: !!caught, targetId: targetId || null };
+      if (idx >= 0) state.history[idx] = entry;
+        else state.history.push(entry);
+          saveHistory();
+            if (state.db && state.userId) {
+                const hRef = ref(state.db, `history/${state.userId}/${dayKey}`);
+                    set(hRef, entry).catch(() => {});
+                      }
+                      }
+
+function watchHistory() {
+  if (!state.db || !state.userId) return;
+    const hRef = ref(state.db, `history/${state.userId}`);
+      onValue(hRef, snap => {
+          const data = snap.val() || {};
+              const list = Object.values(data);
+                  if (Array.isArray(list)) {
+                        state.history = list;
+                              saveHistory();
+                                    updateHistoryUI();
+                                        }
+                                        });
+                                        }
+
+function getPowerupById(id) {
+  return GAME.powerups.find(p => p.id === id) || null;
+}
+
+function pickPowerup(excludeId) {
+  const list = GAME.powerups.filter(p => p.id !== excludeId);
+    return list[Math.floor(Math.random() * list.length)];
+    }
+
+function ensurePowerup() {
+  const now = Date.now();
+    if (state.powerupCooldownUntil && now < state.powerupCooldownUntil) return;
+      if (!state.powerupId) {
+          state.powerupId = pickPowerup(null).id;
+              saveDailyState();
+                }
+                }
+
+function formatCountdown(ts) {
+  const ms = ts - Date.now();
+    if (ms <= 0) return "bereit";
+      const totalSec = Math.ceil(ms / 1000);
+        const m = Math.floor(totalSec / 60);
+          const s = totalSec % 60;
+            return m > 0 ? `${m}m ${s}s` : `${s}s`;
+            }
+
+function computeTargetId() {
+  const others = Object.keys(state.users).filter(uid => uid !== state.userId);
+    if (others.length === 0) return null;
+      others.sort();
+        const seed = hashSeed(state.dayKey);
+          return others[seed % others.length];
+          }
+
+function updateTargetPanel() {
+  const now = Date.now();
+    if (!state.targetId) {
+        DOM.targetId.textContent = "Kein Ziel";
+            DOM.targetStatus.textContent = "Warte auf Spieler";
+                DOM.targetLast.textContent = "–";
+                    DOM.targetNext.textContent = "–";
+                        DOM.catchBtn.disabled = true;
+                            return;
+                            }
+
+                              const target = state.users[state.targetId];
+                                let status = "Offline";
+                                  if (target) {
+                                      const hidden = target.hiddenUntil && target.hiddenUntil > now;
+                                          status = hidden ? "Versteckt" : "Online";
+                                              if (!hidden && target.shieldUntil && target.shieldUntil > now) status = "Shield aktiv";
+                                                }
+                                                  if (state.caughtToday && target) status = "Gefangen";
+
+                                                    DOM.targetId.textContent = state.targetId;
+                                                      DOM.targetStatus.textContent = status;
+                                                        DOM.targetLast.textContent = state.targetSeen ? formatTime(state.targetSeen.ts) : "–";
+                                                          DOM.targetNext.textContent = formatCountdown(state.targetNextUpdateAt);
+
+                                                            const shieldActive = target && target.shieldUntil && target.shieldUntil > now;
+                                                              const hiddenActive = target && target.hiddenUntil && target.hiddenUntil > now;
+                                                                DOM.catchBtn.disabled = state.caughtToday || !target || shieldActive || hiddenActive;
+                                                                }
+
+function updatePowerupUI() {
+  const now = Date.now();
+    const powerup = getPowerupById(state.powerupId);
+      const active = state.powerupActiveUntil > now;
+        const cooldown = state.powerupCooldownUntil > now;
+
+          DOM.powerupTitle.textContent = powerup ? `Power‑Up · ${powerup.name}` : "Power‑Up –";
+            DOM.powerupDesc.textContent = powerup ? powerup.desc : "–";
+              DOM.powerupState.textContent = active ? "Aktiv" : "Bereit";
+                DOM.powerupState.className = active ? "pill active" : "pill";
+                  DOM.powerupCooldown.textContent = cooldown ? `Cooldown ${formatCountdown(state.powerupCooldownUntil)}` : "Cooldown –";
+                    DOM.skipCount.textContent = `Skips: ${state.skipsUsed}/${GAME.skipLimit}`;
+
+                      DOM.powerupUse.disabled = !powerup || active || cooldown;
+                        DOM.powerupCancel.disabled = !active;
+                          DOM.skipBtn.disabled = state.skipsUsed >= GAME.skipLimit || active || cooldown;
+                          }
+
+function computeStreak() {
+  if (!state.history.length) return 0;
+    const sorted = [...state.history].sort((a, b) => a.dayKey.localeCompare(b.dayKey));
+      let streak = 0;
+        for (let i = sorted.length - 1; i >= 0; i--) {
+            if (sorted[i].caught) streak++;
+                else break;
+                  }
+                    return streak;
+                    }
+
+function updateHistoryUI() {
+  const todayEntry = state.history.find(h => h.dayKey === state.dayKey);
+    DOM.statToday.textContent = state.caughtToday ? "Gefangen" : (todayEntry && !todayEntry.caught ? "Verpasst" : "Offen");
+      DOM.statStreak.textContent = `${computeStreak()} Tage`;
+
+        const list = [...state.history].sort((a, b) => b.dayKey.localeCompare(a.dayKey)).slice(0, 7);
+          DOM.historyList.innerHTML = "";
+            for (const item of list) {
+                const row = document.createElement("div");
+                    row.className = "history-item";
+                        const badge = item.caught ? "win" : "lose";
+                            const badgeText = item.caught ? "GEFANGEN" : "VERPASST";
+                                row.innerHTML = `
+      <span>${item.dayKey}</span>
+      <span class="badge ${badge}">${badgeText}</span>
+    `;
+        DOM.historyList.appendChild(row);
+          }
+          }
+
+function applyPowerupEffectStart(powerup) {
+  if (!powerup) return;
+    const now = Date.now();
+      if (powerup.effect === "reveal" || powerup.effect === "fast") {
+          state.targetRevealInterval = GAME.targetFastMs;
+              state.targetNextUpdateAt = 0;
+                }
+                  if (powerup.effect === "ultra") {
+                      state.targetRevealInterval = 10 * 1000;
+                          state.targetNextUpdateAt = 0;
+                            }
+                              if (powerup.effect === "cloak") {
+                                  state.hiddenUntil = now + powerup.durationMs;
+                                    }
+                                      if (powerup.effect === "shield") {
+                                          state.shieldUntil = now + powerup.durationMs;
+                                            }
+                                              if (powerup.effect === "jam") {
+                                                  if (state.myPosition) {
+                                                        state.jamLat = state.myPosition.lat;
+                                                              state.jamLng = state.myPosition.lng;
+                                                                    }
+                                                                        state.jamUntil = now + powerup.durationMs;
+                                                                          }
+                                                                          }
+
+function applyPowerupEffectEnd(powerup) {
+  if (!powerup) return;
+    if (powerup.effect === "reveal" || powerup.effect === "fast" || powerup.effect === "ultra") {
+        state.targetRevealInterval = GAME.targetUpdateMs;
+          }
+            if (powerup.effect === "cloak") {
+                state.hiddenUntil = 0;
+                  }
+                    if (powerup.effect === "shield") {
+                        state.shieldUntil = 0;
+                          }
+                            if (powerup.effect === "jam") {
+                                state.jamUntil = 0;
+                                    state.jamLat = null;
+                                        state.jamLng = null;
+                                          }
+                                          }
+
+function activatePowerup() {
+  const now = Date.now();
+    const powerup = getPowerupById(state.powerupId);
+      if (!powerup) return;
+        if (state.powerupCooldownUntil > now || state.powerupActiveUntil > now) return;
+
+          state.powerupActiveUntil = now + powerup.durationMs;
+            state.powerupCooldownUntil = state.powerupActiveUntil + powerup.cooldownMs;
+              applyPowerupEffectStart(powerup);
+                saveDailyState();
+                  updatePowerupUI();
+                    updateTargetPanel();
+                      updateHistoryUI();
+                        syncMyState();
+                        }
+
+function cancelPowerup() {
+  const now = Date.now();
+    if (state.powerupActiveUntil <= now) return;
+      const powerup = getPowerupById(state.powerupId);
+        state.powerupActiveUntil = now;
+          applyPowerupEffectEnd(powerup);
+            saveDailyState();
+              updatePowerupUI();
+                updateTargetPanel();
+                  updateHistoryUI();
+                    syncMyState();
+                    }
+
+function skipPowerup() {
+  if (state.skipsUsed >= GAME.skipLimit) return;
+    const now = Date.now();
+      if (state.powerupActiveUntil > now || state.powerupCooldownUntil > now) return;
+        const current = state.powerupId;
+          state.powerupId = pickPowerup(current).id;
+            state.skipsUsed += 1;
+              saveDailyState();
+                updatePowerupUI();
+                }
+
+function catchTarget() {
+  const now = Date.now();
+    if (!state.targetId) return;
+      const target = state.users[state.targetId];
+        if (!target) return;
+          if (target.hiddenUntil && target.hiddenUntil > now) {
+              showError("Ziel ist verborgen – aktuell nicht fangbar.");
+                  return;
+                    }
+                      if (target.shieldUntil && target.shieldUntil > now) {
+                          showError("Ziel ist geschützt – aktuell nicht fangbar.");
+                              return;
+                                }
+                                  state.caughtToday = true;
+                                    saveDailyState();
+                                      upsertHistory(state.dayKey, true, state.targetId);
+                                        updateHistoryUI();
+                                          updateTargetPanel();
+                                            if (state.db) {
+                                                const catchRef = ref(state.db, `catches/${state.dayKey}/${state.userId}`);
+                                                    set(catchRef, { targetId: state.targetId, timestamp: now }).catch(() => {});
+                                                      }
+                                                      }
+
+function handleDayChange() {
+  const key = getDayKey();
+    if (state.dayKey === key) return;
+      if (state.dayKey) upsertHistory(state.dayKey, state.caughtToday, state.targetId);
+        state.dayKey = key;
+          state.caughtToday = false;
+            state.skipsUsed = 0;
+              state.powerupActiveUntil = 0;
+                state.powerupCooldownUntil = 0;
+                  state.powerupId = null;
+                    state.targetSeen = null;
+                      state.targetNextUpdateAt = 0;
+                        state.targetRevealInterval = GAME.targetUpdateMs;
+                          saveDailyState();
+                            ensurePowerup();
+                              updateHistoryUI();
+                              }
+
+function tick() {
+  handleDayChange();
+    const now = Date.now();
+      if (state.jamUntil && now >= state.jamUntil) {
+          state.jamUntil = 0;
+              state.jamLat = null;
+                  state.jamLng = null;
+                      syncMyState();
+                        }
+                          if (state.powerupActiveUntil && now >= state.powerupActiveUntil) {
+                              const powerup = getPowerupById(state.powerupId);
+                                  state.powerupActiveUntil = 0;
+                                      applyPowerupEffectEnd(powerup);
+                                          saveDailyState();
+                                              syncMyState();
+                                                }
+                                                  if (state.powerupCooldownUntil && now >= state.powerupCooldownUntil) {
+                                                      state.powerupCooldownUntil = 0;
+                                                          ensurePowerup();
+                                                              saveDailyState();
+                                                                }
+                                                                  if (state.hiddenUntil && now >= state.hiddenUntil) {
+                                                                      state.hiddenUntil = 0;
+                                                                          syncMyState();
+                                                                            }
+                                                                              if (state.shieldUntil && now >= state.shieldUntil) {
+                                                                                  state.shieldUntil = 0;
+                                                                                      syncMyState();
+                                                                                        }
+                                                                                          updatePowerupUI();
+                                                                                            updateTargetPanel();
+                                                                                              updateHistoryUI();
+                                                                                              }
 
                                                                                                         function setStatus(type, text) {
                                                                                                           DOM.statusDot.className = type;
@@ -81,7 +496,7 @@ const FIREBASE_CONFIG = {
 
                                                                                                             function showError(msg) {
                                                                                                               DOM.errorPanel.style.display = "block";
-  DOM.errorPanel.innerHTML = `⚠ ${msg}`;
+  DOM.errorPanel.innerHTML = `Warnung: ${msg}`;
 }
 
 function showLoadingError(msg) {
@@ -123,7 +538,7 @@ function hideLoading() {
                                                                                                                                                                                           });
                                                                                                                                                                                           }
 
-                                                                                                                                                                                          // ─── Karte ────────────────────────────────────────────────────────────────────
+// Karte
 
                                                                                                                                                                                           function initMap() {
   try {
@@ -138,7 +553,7 @@ function hideLoading() {
     throw err;
   }
 }
-                                                                                                                                                                                                        // ─── Marker-Verwaltung ────────────────────────────────────────────────────────
+// Marker-Verwaltung
 
                                                                                                                                                                                                         function upsertMarker(userId, lat, lng, color, isMe) {
                                                                                                                                                                                                           const latlng = L.latLng(lat, lng);
@@ -169,87 +584,157 @@ function hideLoading() {
                                                                                                                                                                                                                                                                   }
                                                                                                                                                                                                                                                                   }
 
-                                                                                                                                                                                                                                                                  // ─── Sidebar ──────────────────────────────────────────────────────────────────
+// Sidebar
 
-                                                                                                                                                                                                                                                                  function renderUserList() {
-                                                                                                                                                                                                                                                                    const now = Date.now();
-                                                                                                                                                                                                                                                                      const sorted = Object.entries(state.users).sort(([a]) => a === state.userId ? -1 : 1);
+function renderUserList() {
+  const now = Date.now();
+  const sorted = Object.entries(state.users).sort(([a]) => a === state.userId ? -1 : 1);
 
-                                                                                                                                                                                                                                                                        DOM.userList.innerHTML = "";
+  DOM.userList.innerHTML = "";
 
-                                                                                                                                                                                                                                                                          let activeCount = 0;
-                                                                                                                                                                                                                                                                            for (const [uid, data] of sorted) {
-                                                                                                                                                                                                                                                                                if (now - data.timestamp > CONFIG.inactiveAfterMs) continue;
-                                                                                                                                                                                                                                                                                    activeCount++;
-                                                                                                                                                                                                                                                                                        const isMe = uid === state.userId;
+  let activeCount = 0;
+  for (const [uid, data] of sorted) {
+    if (now - data.timestamp > CONFIG.inactiveAfterMs) continue;
+    const isMe = uid === state.userId;
+    const hidden = data.hiddenUntil && data.hiddenUntil > now;
+    if (hidden && !isMe) continue;
 
-                                                                                                                                                                                                                                                                                            const card = document.createElement("div");
-                                                                                                                                                                                                                                                                                                card.className = `user-card${isMe ? " is-me" : ""}`;
-                                                                                                                                                                                                                                                                                                    card.innerHTML = `
-                                                                                                                                                                                                                                                                                                          <div class="user-card-top">
-                                                                                                                                                                                                                                                                                                                  <div class="user-avatar" style="background:${data.color}">${uid.charAt(0)}</div>
-                                                                                                                                                                                                                                                                                                                          <div class="user-name" style="color:${data.color}">${isMe ? "Ich" : "Nutzer"} · ${uid}</div>
-                                                                                                                                                                                                                                                                                                                                </div>
-                                                                                                                                                                                                                                                                                                                                      <div class="user-meta">
-                                                                                                                                                                                                                                                                                                                                              <span><span>LAT</span><span class="ml">${data.lat.toFixed(5)}</span></span>
-                                                                                                                                                                                                                                                                                                                                                      <span><span>LNG</span><span class="ml">${data.lng.toFixed(5)}</span></span>
-                                                                                                                                                                                                                                                                                                                                                              <span style="grid-column:1/-1"><span>ZULETZT</span><span class="ml">${formatTime(data.timestamp)}</span></span>
-                                                                                                                                                                                                                                                                                                                                                                    </div>`;
-                                                                                                                                                                                                                                                                                                                                                                        card.addEventListener("click", () => {
-                                                                                                                                                                                                                                                                                                                                                                              state.map.flyTo([data.lat, data.lng], 15, { duration: 1.2 });
-                                                                                                                                                                                                                                                                                                                                                                                    state.markers[uid]?.openPopup();
-                                                                                                                                                                                                                                                                                                                                                                                        });
-                                                                                                                                                                                                                                                                                                                                                                                            DOM.userList.appendChild(card);
-                                                                                                                                                                                                                                                                                                                                                                                              }
+    const isTarget = uid === state.targetId;
+    const display = (isTarget && state.targetSeen) ? state.targetSeen : data;
 
-                                                                                                                                                                                                                                                                                                                                                                                                DOM.onlineCount.textContent = `${activeCount} online`;
-                                                                                                                                                                                                                                                                                                                                                                                                }
+    activeCount++;
+    const card = document.createElement("div");
+    card.className = `user-card${isMe ? " is-me" : ""}${isTarget ? " is-target" : ""}`;
+    card.innerHTML = `
+      <div class="user-card-top">
+        <div class="user-avatar" style="background:${data.color}">${uid.charAt(0)}</div>
+        <div class="user-name" style="color:${data.color}">${isMe ? "Ich" : (isTarget ? "Ziel" : "Nutzer")} · ${uid}</div>
+      </div>
+      <div class="user-meta">
+        <span><span>LAT</span><span class="ml">${display.lat.toFixed(5)}</span></span>
+        <span><span>LNG</span><span class="ml">${display.lng.toFixed(5)}</span></span>
+        <span style="grid-column:1/-1"><span>ZULETZT</span><span class="ml">${formatTime(display.ts || data.timestamp)}</span></span>
+      </div>`;
+    card.addEventListener("click", () => {
+      state.map.flyTo([display.lat, display.lng], 15, { duration: 1.2 });
+      state.markers[uid]?.openPopup();
+    });
+    DOM.userList.appendChild(card);
+  }
 
-                                                                                                                                                                                                                                                                                                                                                                                                // ─── Firebase ─────────────────────────────────────────────────────────────────
+  DOM.onlineCount.textContent = `${activeCount} online`;
+}
+
+// Firebase
 
                                                                                                                                                                                                                                                                                                                                                                                                 function uploadPosition(lat, lng, accuracy) {
                                                                                                                                                                                                                                                                                                                                                                                                   const now = Date.now();
                                                                                                                                                                                                                                                                                                                                                                                                     if (now - state.lastUpdate < CONFIG.updateIntervalMs) return;
                                                                                                                                                                                                                                                                                                                                                                                                       state.lastUpdate = now;
 
+                                                                                                                                                                                                                                                                                                                                                                                                        const jamActive = state.jamUntil && now < state.jamUntil && state.jamLat !== null && state.jamLng !== null;
+                                                                                                                                                                                                                                                                                                                                                                                                          const sendLat = jamActive ? state.jamLat : lat;
+                                                                                                                                                                                                                                                                                                                                                                                                            const sendLng = jamActive ? state.jamLng : lng;
+
                                                                                                                                                                                                                                                                                                                                                                                                         set(state.myRef, {
-                                                                                                                                                                                                                                                                                                                                                                                                            latitude:  lat,
-                                                                                                                                                                                                                                                                                                                                                                                                                longitude: lng,
+                                                                                                                                                                                                                                                                                                                                                                                                            latitude:  sendLat,
+                                                                                                                                                                                                                                                                                                                                                                                                                longitude: sendLng,
                                                                                                                                                                                                                                                                                                                                                                                                                     accuracy:  Math.round(accuracy),
                                                                                                                                                                                                                                                                                                                                                                                                                         timestamp: now,
                                                                                                                                                                                                                                                                                                                                                                                                                             color:     state.userColor,
-                                                                                                                                                                                                                                                                                                                                                                                                                                userId:    state.userId
+                                                                                                                                                                                                                                                                                                                                                                                                                                userId:    state.userId,
+                                                                                                                                                                                                                                                                                                                                                                                                                                  hiddenUntil: state.hiddenUntil || 0,
+                                                                                                                                                                                                                                                                                                                                                                                                                                    shieldUntil: state.shieldUntil || 0
                                                                                                                                                                                                                                                                                                                                                                                                                                   }).catch(err => console.error("[Firebase] Upload:", err));
                                                                                                                                                                                                                                                                                                                                                                                                                                   }
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                  function watchAllUsers() {
-                                                                                                                                                                                                                                                                                                                                                                                                                                    onValue(state.usersRef, snapshot => {
-    const data = snapshot.val() || {};
+                                                                                                                                                                                                                                                                                                                                                                                                                                  function syncMyState() {
+                                                                                                                                                                                                                                                                                                                                                                                                                                    if (!state.myPosition || !state.myRef) return;
+                                                                                                                                                                                                                                                                                                                                                                                                                                      const accuracy = state.lastAccuracy ?? 0;
+                                                                                                                                                                                                                                                                                                                                                                                                                                        const now = Date.now();
+                                                                                                                                                                                                                                                                                                                                                                                                                                          const jamActive = state.jamUntil && now < state.jamUntil && state.jamLat !== null && state.jamLng !== null;
+                                                                                                                                                                                                                                                                                                                                                                                                                                            const sendLat = jamActive ? state.jamLat : state.myPosition.lat;
+                                                                                                                                                                                                                                                                                                                                                                                                                                              const sendLng = jamActive ? state.jamLng : state.myPosition.lng;
+                                                                                                                                                                                                                                                                                                                                                                                                                                        set(state.myRef, {
+                                                                                                                                                                                                                                                                                                                                                                                                                                            latitude:  sendLat,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                longitude: sendLng,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                    accuracy:  Math.round(accuracy),
+                                                                                                                                                                                                                                                                                                                                                                                                                                                        timestamp: now,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                            color:     state.userColor,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                userId:    state.userId,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                    hiddenUntil: state.hiddenUntil || 0,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                        shieldUntil: state.shieldUntil || 0
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                          }).catch(err => console.error("[Firebase] Sync:", err));
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                          }
 
-    // Entfernte Nutzer löschen
+function watchAllUsers() {
+  onValue(state.usersRef, snapshot => {
+    const data = snapshot.val() || {};
+    const now = Date.now();
+
+    const nextUsers = {};
+    for (const [uid, entry] of Object.entries(data)) {
+      nextUsers[uid] = {
+        lat: entry.latitude,
+        lng: entry.longitude,
+        color: entry.color || "#4d8eff",
+        timestamp: entry.timestamp || now,
+        hiddenUntil: entry.hiddenUntil || 0,
+        shieldUntil: entry.shieldUntil || 0
+      };
+    }
+    state.users = nextUsers;
+
+    const nextTarget = computeTargetId();
+    if (nextTarget !== state.targetId) {
+      state.targetId = nextTarget;
+      state.targetSeen = null;
+      state.targetNextUpdateAt = 0;
+    }
+
+    // Entfernte Nutzer löschen oder versteckte Marker entfernen
     for (const uid of Object.keys(state.markers)) {
-      if (!data[uid]) { removeMarker(uid); delete state.users[uid]; }
+      const u = state.users[uid];
+      const hidden = u && u.hiddenUntil && u.hiddenUntil > now;
+      if (!u || (hidden && uid !== state.userId)) {
+        removeMarker(uid);
+        delete state.markers[uid];
+      }
     }
 
     // Alle Nutzer aktualisieren
-    for (const [uid, entry] of Object.entries(data)) {
+    for (const [uid, entry] of Object.entries(state.users)) {
       const isMe  = uid === state.userId;
-      const color = entry.color || "#4d8eff";
-      state.users[uid] = { lat: entry.latitude, lng: entry.longitude, color, timestamp: entry.timestamp || Date.now() };
-      upsertMarker(uid, entry.latitude, entry.longitude, color, isMe);
+      const hidden = entry.hiddenUntil && entry.hiddenUntil > now;
+      if (hidden && !isMe) continue;
 
-      // Popup-Text aktualisieren
-      const label = isMe ? `Ich (${uid})` : `Nutzer ${uid}`;
-      state.markers[uid]?.setPopupContent(buildPopup(label, color, entry.latitude, entry.longitude, entry.timestamp));
+      if (uid === state.targetId && !isMe) {
+        const shouldUpdate = !state.targetSeen || now >= state.targetNextUpdateAt || state.targetRevealInterval !== GAME.targetUpdateMs;
+        if (shouldUpdate) {
+          state.targetSeen = { lat: entry.lat, lng: entry.lng, ts: entry.timestamp || now };
+          state.targetNextUpdateAt = now + state.targetRevealInterval;
+        }
+        const lat = state.targetSeen ? state.targetSeen.lat : entry.lat;
+        const lng = state.targetSeen ? state.targetSeen.lng : entry.lng;
+        const ts  = state.targetSeen ? state.targetSeen.ts : entry.timestamp;
+        upsertMarker(uid, lat, lng, entry.color, false);
+        const label = `Ziel ${uid}`;
+        state.markers[uid]?.setPopupContent(buildPopup(label, entry.color, lat, lng, ts));
+      } else {
+        upsertMarker(uid, entry.lat, entry.lng, entry.color, isMe);
+        const label = isMe ? `Ich (${uid})` : `Nutzer ${uid}`;
+        state.markers[uid]?.setPopupContent(buildPopup(label, entry.color, entry.lat, entry.lng, entry.timestamp));
+      }
     }
 
     renderUserList();
+    updateTargetPanel();
   }, err => {
     console.error("[Firebase] watchAllUsers Fehler", err);
     showLoadingError("Firebase-Daten konnten nicht geladen werden: " + (err.message || err));
   });
 }
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      // ─── Geolocation ──────────────────────────────────────────────────────────────
+// Geolocation
 
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       function startGeolocation() {
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         if (!navigator.geolocation) {
@@ -282,8 +767,9 @@ function hideLoading() {
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 state.map.flyTo([lat, lng], 14, { duration: 2 });
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   }
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    state.myPosition = { lat, lng };
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      uploadPosition(lat, lng, accuracy);
+                  state.myPosition = { lat, lng };
+                    state.lastAccuracy = accuracy;
+                    uploadPosition(lat, lng, accuracy);
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         hideLoading();
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         }
 
@@ -298,7 +784,7 @@ function hideLoading() {
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               hideLoading();
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               }
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              // ─── Cleanup ──────────────────────────────────────────────────────────────────
+// Cleanup
 
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               function cleanup() {
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 if (state.myRef) remove(state.myRef).catch(() => {});
@@ -316,17 +802,45 @@ window.addEventListener("unhandledrejection", event => {
   showLoadingError("Unerwarteter Fehler: " + reason);
 });
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  // ─── Init ─────────────────────────────────────────────────────────────────────
+// Init
 
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   async function init() {
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    state.userId    = generateId();
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      state.userColor = randomColor();
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    state.dayKey = getDayKey();
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      loadIdentity();
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         DOM.userBadge.textContent = state.userId;
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          loadDailyState();
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            loadHistory();
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              if (state.powerupActiveUntil > Date.now()) {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                const activePower = getPowerupById(state.powerupId);
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  if (activePower) {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    if (activePower.effect === "cloak") state.hiddenUntil = state.powerupActiveUntil;
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      if (activePower.effect === "shield") state.shieldUntil = state.powerupActiveUntil;
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        if (activePower.effect === "reveal" || activePower.effect === "fast") state.targetRevealInterval = GAME.targetFastMs;
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          if (activePower.effect === "ultra") state.targetRevealInterval = 10 * 1000;
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            if (activePower.effect === "jam") {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              state.jamUntil = state.powerupActiveUntil;
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                if (state.myPosition) {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  state.jamLat = state.myPosition.lat;
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    state.jamLng = state.myPosition.lng;
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      }
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      }
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        }
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        }
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        ensurePowerup();
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          updatePowerupUI();
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            updateTargetPanel();
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              updateHistoryUI();
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          DOM.loadingMsg.textContent = "Initialisiere Karte…";
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            initMap();
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                DOM.catchBtn.addEventListener("click", catchTarget);
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  DOM.skipBtn.addEventListener("click", skipPowerup);
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    DOM.powerupUse.addEventListener("click", activatePowerup);
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      DOM.powerupCancel.addEventListener("click", cancelPowerup);
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        setInterval(tick, 1000);
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              DOM.loadingMsg.textContent = "Verbinde mit Firebase…";
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          DOM.loadingMsg.textContent = "Initialisiere Karte…";
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            initMap();
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              DOM.loadingMsg.textContent = "Verbinde mit Firebase…";
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 try {
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     const app    = initializeApp(FIREBASE_CONFIG);
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         state.db       = getDatabase(app);
@@ -345,6 +859,7 @@ window.addEventListener("unhandledrejection", event => {
         }
       });
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 watchAllUsers();
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                watchHistory();
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     window.addEventListener("beforeunload", cleanup);
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       } catch (err) {
         showLoadingError(`Firebase Fehler: ${err.message}`);
@@ -356,3 +871,7 @@ window.addEventListener("unhandledrejection", event => {
       startGeolocation();
     }
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         init();
+
+
+
+
