@@ -118,8 +118,18 @@ const ADMIN_PASSWORD = "livetrack-2026";
                                                                                                                                         adminNote: document.getElementById("admin-note"),
                                                                                                                                           adminResetDay: document.getElementById("admin-reset-day"),
                                                                                                                                             adminRerollPowerup: document.getElementById("admin-reroll-powerup"),
+                                                                                                                                              adminRevealTarget: document.getElementById("admin-reveal-target"),
+                                                                                                                                                adminClearTarget: document.getElementById("admin-clear-target"),
+                                                                                                                                                  adminToggleCloak: document.getElementById("admin-toggle-cloak"),
+                                                                                                                                                    adminToggleShield: document.getElementById("admin-toggle-shield"),
+                                                                                                                                                      adminFastMode: document.getElementById("admin-fast-mode"),
+                                                                                                                                                        adminNormalMode: document.getElementById("admin-normal-mode"),
                                                                                                                                               adminClearHistory: document.getElementById("admin-clear-history"),
-                                                                                                                                                adminRemoveStale: document.getElementById("admin-remove-stale")
+                                                                                                                                                adminRemoveStale: document.getElementById("admin-remove-stale"),
+                                                                                                                                                  adminResetSkips: document.getElementById("admin-reset-skips"),
+                                                                                                                                                    adminClearCatch: document.getElementById("admin-clear-catch"),
+                                                                                                                                                      adminFocusMe: document.getElementById("admin-focus-me"),
+                                                                                                                                                        adminFocusTarget: document.getElementById("admin-focus-target")
                                                                                             };
 
 // Hilfsfunktionen
@@ -413,6 +423,58 @@ function adminRerollPowerup() {
   setAdminNote(`Neues Power-Up: ${getPowerupById(state.powerupId)?.name || "-"}.`);
 }
 
+function adminRevealTarget() {
+  const target = state.targetId ? state.users[state.targetId] : null;
+  if (!target) {
+    setAdminNote("Kein aktives Ziel gefunden.");
+    return;
+  }
+  state.targetSeen = { lat: target.lat, lng: target.lng, ts: Date.now() };
+  state.targetNextUpdateAt = Date.now() + state.targetRevealInterval;
+  updateTargetPanel();
+  renderUserList();
+  if (state.markers[state.targetId]) {
+    state.markers[state.targetId].setLatLng([target.lat, target.lng]);
+  }
+  setAdminNote("Ziel-Sichtung sofort aktualisiert.");
+}
+
+function adminClearTarget() {
+  state.targetSeen = null;
+  state.targetNextUpdateAt = 0;
+  updateTargetPanel();
+  renderUserList();
+  setAdminNote("Ziel-Sichtung geleert.");
+}
+
+function adminToggleCloak() {
+  const active = state.hiddenUntil && state.hiddenUntil > Date.now();
+  state.hiddenUntil = active ? 0 : Date.now() + (15 * 60 * 1000);
+  syncMyState();
+  setAdminNote(active ? "Cloak deaktiviert." : "Cloak fuer 15 Min aktiviert.");
+}
+
+function adminToggleShield() {
+  const active = state.shieldUntil && state.shieldUntil > Date.now();
+  state.shieldUntil = active ? 0 : Date.now() + (8 * 60 * 1000);
+  syncMyState();
+  setAdminNote(active ? "Shield deaktiviert." : "Shield fuer 8 Min aktiviert.");
+}
+
+function adminSetFastMode() {
+  state.targetRevealInterval = GAME.targetFastMs;
+  state.targetNextUpdateAt = 0;
+  updateTargetPanel();
+  setAdminNote("Fast Scan aktiv.");
+}
+
+function adminSetNormalMode() {
+  state.targetRevealInterval = GAME.targetUpdateMs;
+  state.targetNextUpdateAt = 0;
+  updateTargetPanel();
+  setAdminNote("Normal Scan aktiv.");
+}
+
 function adminClearHistory() {
   state.history = [];
   localStorage.removeItem("lm_history");
@@ -421,6 +483,24 @@ function adminClearHistory() {
   }
   updateHistoryUI();
   setAdminNote("History geloescht.");
+}
+
+function adminResetSkips() {
+  state.skipsUsed = 0;
+  saveDailyState();
+  updatePowerupUI();
+  setAdminNote("Skips zurueckgesetzt.");
+}
+
+function adminClearCatch() {
+  state.caughtToday = false;
+  saveDailyState();
+  updateTargetPanel();
+  updateHistoryUI();
+  if (state.db && state.userId && state.dayKey) {
+    remove(ref(state.db, `catches/${state.dayKey}/${state.userId}`)).catch(() => {});
+  }
+  setAdminNote("Catch-Status entfernt.");
 }
 
 function adminRemoveStaleUsers() {
@@ -444,6 +524,25 @@ function adminRemoveStaleUsers() {
   setAdminNote(`${staleUsers.length} stale Nutzer entfernt.`);
 }
 
+function adminFocusMe() {
+  if (!state.map || !state.myPosition) {
+    setAdminNote("Eigene Position nicht verfuegbar.");
+    return;
+  }
+  state.map.flyTo([state.myPosition.lat, state.myPosition.lng], 16, { duration: 0.8 });
+  setAdminNote("Karte auf eigene Position gesetzt.");
+}
+
+function adminFocusTarget() {
+  const target = state.targetSeen || (state.targetId ? state.users[state.targetId] : null);
+  if (!state.map || !target) {
+    setAdminNote("Zielposition nicht verfuegbar.");
+    return;
+  }
+  state.map.flyTo([target.lat, target.lng], 16, { duration: 0.8 });
+  setAdminNote("Karte auf Ziel gesetzt.");
+}
+
 function setupAdminMenu() {
   if (!DOM.adminTrigger || !DOM.adminOverlay) return;
   DOM.adminTrigger.addEventListener("click", openAdminMenu);
@@ -458,8 +557,18 @@ function setupAdminMenu() {
   });
   DOM.adminResetDay.addEventListener("click", adminResetDay);
   DOM.adminRerollPowerup.addEventListener("click", adminRerollPowerup);
+  DOM.adminRevealTarget.addEventListener("click", adminRevealTarget);
+  DOM.adminClearTarget.addEventListener("click", adminClearTarget);
+  DOM.adminToggleCloak.addEventListener("click", adminToggleCloak);
+  DOM.adminToggleShield.addEventListener("click", adminToggleShield);
+  DOM.adminFastMode.addEventListener("click", adminSetFastMode);
+  DOM.adminNormalMode.addEventListener("click", adminSetNormalMode);
   DOM.adminClearHistory.addEventListener("click", adminClearHistory);
   DOM.adminRemoveStale.addEventListener("click", adminRemoveStaleUsers);
+  DOM.adminResetSkips.addEventListener("click", adminResetSkips);
+  DOM.adminClearCatch.addEventListener("click", adminClearCatch);
+  DOM.adminFocusMe.addEventListener("click", adminFocusMe);
+  DOM.adminFocusTarget.addEventListener("click", adminFocusTarget);
 }
 
 function setupMobileSheet() {
