@@ -1,0 +1,23 @@
+{
+  "name": "Handy Fangen",
+  "short_name": "Handy Fangen",
+  "theme_color": "#b30000",
+  "background_color": "#e00000",
+  "display": "fullscreen",
+  "orientation": "portrait",
+  "scope": "/",
+  "start_url": "/",
+  "description": "Handy Fangen",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

@@ -344,13 +344,21 @@ function setupMobileSheet() {
   let startY = 0;
   let currentY = 0;
   let dragging = false;
+  let state = "mid";
 
-  const setCollapsed = (collapsed) => {
-    DOM.sidebar.classList.toggle("collapsed", collapsed);
+  const setState = (next) => {
+    state = next;
+    DOM.sidebar.classList.toggle("sheet-open", next === "open");
+    DOM.sidebar.classList.toggle("sheet-mid", next === "mid");
+    if (next === "collapsed") {
+      DOM.sidebar.classList.remove("sheet-open", "sheet-mid");
+    }
   };
 
   const onTouchStart = (e) => {
     if (!mql.matches) return;
+    const target = e.target;
+    if (target.closest("#user-list-container")) return;
     dragging = true;
     startY = e.touches[0].clientY;
     currentY = 0;
@@ -366,17 +374,34 @@ function setupMobileSheet() {
   const onTouchEnd = () => {
     if (!dragging || !mql.matches) return;
     dragging = false;
-    if (currentY > 40) setCollapsed(true);
-    if (currentY < -40) setCollapsed(false);
+    if (currentY > 80) setState("collapsed");
+    else if (currentY < -80) setState("open");
+    else setState("mid");
   };
 
-  DOM.sheetHandle.addEventListener("click", () => {
+  DOM.sidebar.addEventListener("click", (e) => {
     if (!mql.matches) return;
-    setCollapsed(!DOM.sidebar.classList.contains("collapsed"));
+    if (e.target.closest("#user-list-container")) return;
+    if (e.target.closest("button")) return;
+    setState(state === "open" ? "mid" : "open");
   });
-  DOM.sheetHandle.addEventListener("touchstart", onTouchStart, { passive: true });
-  DOM.sheetHandle.addEventListener("touchmove", onTouchMove, { passive: false });
-  DOM.sheetHandle.addEventListener("touchend", onTouchEnd);
+  DOM.sheetHandle.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (!mql.matches) return;
+    setState(state === "open" ? "mid" : "open");
+  });
+  DOM.sidebar.addEventListener("touchstart", onTouchStart, { passive: true });
+  DOM.sidebar.addEventListener("touchmove", onTouchMove, { passive: false });
+  DOM.sidebar.addEventListener("touchend", onTouchEnd);
+
+  if (mql.matches) setState("mid");
+  mql.addEventListener("change", () => {
+    if (!mql.matches) {
+      DOM.sidebar.classList.remove("sheet-open", "sheet-mid");
+      return;
+    }
+    setState("mid");
+  });
 }
 
 function applyPowerupEffectStart(powerup) {
@@ -590,13 +615,18 @@ function hideLoading() {
 
 // Karte
 
-                                                                                                                                                                                          function initMap() {
+function initMap() {
   try {
     state.map = L.map("map", { center: [51.1657, 10.4515], zoom: 6 });
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
       maxZoom: 19
     }).addTo(state.map);
+    state.map.on("click", () => {
+      if (!DOM.sidebar) return;
+      DOM.sidebar.classList.remove("sheet-open");
+      DOM.sidebar.classList.add("sheet-mid");
+    });
   } catch (err) {
     console.error("[Map] Init-Error", err);
     showLoadingError("Karte konnte nicht initialisiert werden. Bitte Seite neu laden.");
